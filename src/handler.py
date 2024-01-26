@@ -4,12 +4,19 @@ import logging
 import threading
 
 from datetime import datetime
+import traceback
 
-from tencentcloud.common import credential,common_client
+enabled = False
+try:
+    from tencentcloud.common import credential,common_client
+    from . import cls_pb2
+    enabled = True
+except ModuleNotFoundError as e:
+    print(f'未安装tencentcloud库，请使用pip install tencentcloud-sdk-python安装，错误消息：{e.msg}\n{traceback.format_exc()}')
+    enabled = False
 
 from amiyabot import Message
 
-from ..cls import cls_pb2
 
 class TencentClsHandler(logging.Handler):
     plugin_instance = None
@@ -22,10 +29,17 @@ class TencentClsHandler(logging.Handler):
         self.worker_thread.start()
 
     def emit(self, record):
+        if enabled == False:
+            return
+        
         # 确定时间戳
-        record.timestamp = datetime.now().timestamp()
+        data = get_frame_data(record)
         # 入队
-        self.log_queue.put(record)
+        self.log_queue.put({
+            "timestamp": datetime.now().timestamp(),
+            "record": record,
+            "data": data
+        })
         # 检查工作线程状态，如有必要重启
         if not self.worker_thread.is_alive():
             self.worker_thread = threading.Thread(target=self._worker)
@@ -35,12 +49,11 @@ class TencentClsHandler(logging.Handler):
     def _worker(self):
         while True:
             try:
-                record = self.log_queue.get()
-                if record is None:
+                data_dict = self.log_queue.get()
+                if data_dict is None:
                     break
                 # 处理日志上传
-                data = get_frame_data(record)
-                upload_log(self, record, data)
+                upload_log(self, data_dict)
             except Exception as e:
                 # 处理可能的异常
                 pass
@@ -113,10 +126,14 @@ def find_caller_with_message():
 
     return None
 
-def upload_log(handler,record,data):
+def upload_log(handler,data_dict):
     try:
         # debug_print("uploading log")
         # 提取 message 和 extra
+        record = data_dict["record"]
+        data = data_dict["data"]
+        timestamp = data_dict["timestamp"]
+
         message = record.msg
         log_level = logging.getLevelName(record.levelno)
         
@@ -149,7 +166,7 @@ def upload_log(handler,record,data):
         }
 
         log = cls_pb2.Log()
-        log.time = int(record.timestamp)
+        log.time = int(timestamp)
 
         for item in log_items:
             for key in item.keys():

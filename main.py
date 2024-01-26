@@ -2,7 +2,7 @@ import os
 
 from core import AmiyaBotPluginInstance
 
-from .src.logger.handler import TencentClsHandler
+from .src.handler import TencentClsHandler
 
 from amiyabot import Message,log
 from amiyabot.log.manager import LoggerManager
@@ -30,6 +30,11 @@ TencentClsHandler.plugin_instance = bot
 
 handler = TencentClsHandler()
 
-LoggerManager.add_handler(handler)
+# 检测是否有add_handler函数
+if hasattr(LoggerManager, 'add_handler'):
+    # 检查是不是函数
+    if callable(LoggerManager.add_handler):
+        # 添加handler
+        LoggerManager.add_handler(handler)
+        print("LogHandler installed")
 
-print("LogHandler installed")
